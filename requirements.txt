@@ -1,0 +1,6 @@
+flask
+flask-apscheduler
+selenium
+webdriver-manager
+python-dotenv
+requests
