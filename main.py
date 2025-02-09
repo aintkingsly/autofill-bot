@@ -15,10 +15,11 @@ from telegram.ext import Updater, CommandHandler
 logging.basicConfig(level=logging.INFO)
 
 # Load environment variables
-BOT_TOKEN = os.getenv("7608530963:AAFWfKSsE1rG7XwHVJwjaU2iJ9C6MS6Y5rw")
-MS_USERNAME = os.getenv("kingslyrufus.23cs@kct.ac.in")
-MS_PASSWORD = os.getenv("Kingsly7532")
-FORM_URL = "https://forms.office.com/pages/responsepage.aspx?id=loKLa_-92EqTrYS8vzhC9bKvBXTN0gZBlDaTlvDYFn5UOFhEN05BMzFYNzBDQVdDRjY1WTYzRUxZTS4u"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+MS_USERNAME = os.getenv("MS_USERNAME")
+MS_PASSWORD = os.getenv("MS_PASSWORD")
+FORM_URL = os.getenv("FORM_URL")
+DEFAULT_SCHEDULE_TIME = os.getenv("SCHEDULE_TIME", "10:00")
 
 # Telegram Bot
 bot = Bot(token=BOT_TOKEN)
@@ -33,8 +34,7 @@ options.add_argument("--disable-gpu")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 
-# Function to fill and submit the form
-def fill_form(date, dropdown_option):
+def fill_form(date, return_date, outing_time, return_time, purpose_option):
     try:
         driver = webdriver.Chrome(options=options)
         driver.get(FORM_URL)
@@ -47,24 +47,47 @@ def fill_form(date, dropdown_option):
         driver.find_element(By.ID, "idSIButton9").click()
         time.sleep(3)
 
-        # ✅ Select User-Provided Dropdown Option (UPDATED)
-        dropdown = WebDriverWait(driver, 10).until(
+        # ✅ Fill Text Fields
+        text_fields = driver.find_elements(By.CLASS_NAME, "-as-68")
+        text_fields[0].send_keys("Kingsly Rufus K J")
+        text_fields[1].send_keys("23BCS073")
+        text_fields[2].send_keys("9942555337")
+        text_fields[3].send_keys("207")
+        text_fields[4].send_keys(outing_time)
+        text_fields[5].send_keys(return_time)
+
+        # ✅ Select Dropdown Options
+        hostel_dropdown = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, "//div[@aria-labelledby='QuestionId_r29db15822bde4c848cfcd465dad7b0b5 QuestionInfo_r29db15822bde4c848cfcd465dad7b0b5']"))
         )
-        dropdown.click()
+        hostel_dropdown.click()
         time.sleep(1)
+        driver.find_element(By.XPATH, "//div[@role='option'][2]").click()
 
-        selected_option = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, f"//div[@role='option'][{dropdown_option}]"))
+        outing_register_dropdown = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, "//div[@aria-labelledby='QuestionId_re944ec370e9b4cada53745fb23ddc612 QuestionInfo_re944ec370e9b4cada53745fb23ddc612']"))
         )
-        selected_option.click()
+        outing_register_dropdown.click()
+        time.sleep(1)
+        driver.find_element(By.XPATH, "//div[@role='option'][1]").click()
 
-        # ✅ Fill User-Provided Date Field (UPDATED)
-        date_field = WebDriverWait(driver, 10).until(
+        purpose_dropdown = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, "//div[@aria-labelledby='QuestionId_rc485d02d818d43a9ae2d851a4f3e4afe QuestionInfo_rc485d02d818d43a9ae2d851a4f3e4afe']"))
+        )
+        purpose_dropdown.click()
+        time.sleep(1)
+        driver.find_element(By.XPATH, f"//div[@role='option'][{purpose_option}]").click()
+
+        # ✅ Fill Date Fields
+        outing_date_field = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.XPATH, "//input[@id='DatePicker0-label']"))
         )
-        date_field.send_keys(date)
-        time.sleep(1)
+        outing_date_field.send_keys(date)
+
+        return_date_field = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//input[@id='DatePicker7-label']"))
+        )
+        return_date_field.send_keys(return_date)
 
         # ✅ Submit Form
         submit_button = WebDriverWait(driver, 10).until(
@@ -79,27 +102,31 @@ def fill_form(date, dropdown_option):
         logging.error(f"❌ Error filling form: {e}")
 
 # Telegram Command to Schedule
+
 def schedule_fill(update, context):
     args = context.args
-    if len(args) < 3:
-        update.message.reply_text("Usage: /schedule <date> <dropdown_option> <time>")
+    if len(args) < 5:
+        update.message.reply_text("Usage: /schedule <outing_date> <return_date> <outing_time> <return_time> <purpose_option> <schedule_time>")
         return
 
-    date, dropdown_option, schedule_time = args[0], int(args[1]), args[2]
+    date, return_date, outing_time, return_time, purpose_option, schedule_time = args[0], args[1], args[2], args[3], int(args[4]), args[5]
 
-    schedule.every().day.at(schedule_time).do(fill_form, date, dropdown_option)
+    schedule.every().day.at(schedule_time).do(fill_form, date, return_date, outing_time, return_time, purpose_option)
     update.message.reply_text(f"✅ Scheduled form autofill for {date} at {schedule_time}.")
 
 # Flask API to Trigger Form
 @app.route("/schedule", methods=["POST"])
 def api_schedule():
     data = request.json
-    date = data.get("date", "")
-    dropdown_option = int(data.get("dropdown_option", 1))
-    schedule_time = data.get("schedule_time", "10:00")
+    date = data.get("outing_date", "")
+    return_date = data.get("return_date", "")
+    outing_time = data.get("outing_time", "")
+    return_time = data.get("return_time", "")
+    purpose_option = int(data.get("purpose_option", 1))
+    schedule_time = data.get("schedule_time", DEFAULT_SCHEDULE_TIME)
 
-    schedule.every().day.at(schedule_time).do(fill_form, date, dropdown_option)
-    return jsonify({"status": "Form submission scheduled successfully."})
+    schedule.every().day.at(schedule_time).do(fill_form, date, return_date, outing_time, return_time, purpose_option)
+    return jsonify({"status": "Form scheduled successfully.", "schedule_time": schedule_time})
 
 # Start Telegram Bot
 def start_telegram_bot():
